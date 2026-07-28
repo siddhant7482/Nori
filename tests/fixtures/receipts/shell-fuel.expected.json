@@ -1,0 +1,9 @@
+{
+  "merchantName": "Shell",
+  "currency": "GBP",
+  "subtotal": 6413,
+  "total": 6413,
+  "lineItemCount": 2,
+  "category": "fuel",
+  "note": "VAT is included in the total here, not added — a classic reconciliation trap."
+}

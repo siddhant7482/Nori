@@ -1,0 +1,84 @@
+# Local infrastructure for Nori.
+#
+# This file deliberately runs *only* the backing services. The Next.js app and
+# the OCR worker run on the host via `npm run dev` / `npm run worker` — bind
+# mounts plus node_modules inside a Linux container on Windows makes hot reload
+# unusably slow, and there is nothing to gain from containerising the thing
+# you are actively editing.
+#
+# Production images for app + worker live in docker-compose.prod.yml.
+#
+#   docker compose up -d
+#   npm run dev
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: nori-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: nori
+      POSTGRES_PASSWORD: nori
+      POSTGRES_DB: nori
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U nori -d nori"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  minio:
+    image: minio/minio:latest
+    container_name: nori-minio
+    restart: unless-stopped
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: nori
+      MINIO_ROOT_PASSWORD: noripassword
+    ports:
+      - "9000:9000" # S3 API
+      - "9001:9001" # web console — http://localhost:9001
+    volumes:
+      - miniodata:/data
+    healthcheck:
+      test: ["CMD", "mc", "ready", "local"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  # One-shot: create the bucket, keep it private, and expire orphaned uploads.
+  # Objects are only ever reached through presigned URLs (spec §11) — the
+  # bucket must never be anonymously readable, since it holds people's
+  # financial records.
+  minio-init:
+    image: minio/mc:latest
+    container_name: nori-minio-init
+    depends_on:
+      minio:
+        condition: service_healthy
+    entrypoint: >
+      /bin/sh -c "
+      mc alias set local http://minio:9000 nori noripassword &&
+      mc mb --ignore-existing local/nori-receipts &&
+      mc anonymous set none local/nori-receipts &&
+      mc ilm rule add --expire-days 1 --tags 'orphan=true' local/nori-receipts 2>/dev/null || true;
+      echo 'bucket ready';
+      "
+
+  # Catches magic-link emails in development. UI at http://localhost:8025
+  mailhog:
+    image: mailhog/mailhog:latest
+    container_name: nori-mailhog
+    restart: unless-stopped
+    ports:
+      - "1025:1025" # SMTP
+      - "8025:8025" # web UI
+    logging:
+      driver: none # it is extremely chatty
+
+volumes:
+  pgdata:
+  miniodata:

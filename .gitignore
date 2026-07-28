@@ -32,6 +32,7 @@ yarn-error.log*
 
 # env files (can opt-in for committing if needed)
 .env*
+!.env.example
 
 # vercel
 .vercel
@@ -39,3 +40,11 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# Tesseract language data, downloaded on first run
+.cache/
+
+# Third-party receipt dataset — real receipts, not ours to redistribute.
+# Benchmarks in scripts/bench-*.mts read from here; point --dir elsewhere or
+# drop the images back in to reproduce them.
+receipts_train/

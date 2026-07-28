@@ -1,0 +1,11 @@
+{
+  "merchantName": "Tesco Express",
+  "currency": "GBP",
+  "subtotal": 1130,
+  "taxTotal": 0,
+  "total": 1130,
+  "lineItemCount": 5,
+  "category": "groceries",
+  "paymentMethod": "CARD",
+  "cardLast4": "4417"
+}

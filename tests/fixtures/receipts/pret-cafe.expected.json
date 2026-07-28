@@ -1,0 +1,10 @@
+{
+  "merchantName": "Pret A Manger",
+  "currency": "GBP",
+  "subtotal": 1075,
+  "taxTotal": 215,
+  "tipTotal": 108,
+  "total": 1398,
+  "lineItemCount": 3,
+  "category": "restaurants"
+}
