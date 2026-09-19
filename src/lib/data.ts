@@ -1,7 +1,7 @@
 import { and, asc, desc, eq, gte, inArray, lte, sql } from "drizzle-orm";
 import { cache } from "react";
 import { db } from "@/db";
-import { accounts, categories, connection, pots, rules, settings, syncRuns, transactions } from "@/db/schema";
+import { accounts, categories, connection, pots, receipts, rules, settings, syncRuns, transactions } from "@/db/schema";
 import { addDays, today as londonToday, type Day } from "./london";
 import { computeMonth, type Month, type TxIn } from "./month";
 import { doubleCharges, findRecurring, stillDue, type DoubleCharge, type Due, type Series } from "./recurring";
@@ -137,6 +137,20 @@ export async function allCategories() {
 
 export async function allRules() {
   return db.select().from(rules).orderBy(desc(rules.id));
+}
+
+/** Receipts, newest first, with the payment each is attached to. */
+export async function allReceipts() {
+  const rows = await db
+    .select({
+      r: receipts,
+      tx: { id: transactions.id, day: transactions.day, amount: transactions.amount, merchantName: transactions.merchantName, description: transactions.description, categoryId: transactions.categoryId },
+    })
+    .from(receipts)
+    .leftJoin(transactions, eq(receipts.txId, transactions.id))
+    .orderBy(desc(receipts.id))
+    .limit(120);
+  return rows;
 }
 
 export async function allPots() {

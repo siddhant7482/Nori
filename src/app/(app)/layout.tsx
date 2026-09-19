@@ -20,6 +20,7 @@ function screens(unfiled: number): Screen[] {
     { id: "home", k: "1", name: "Home", href: "/" },
     { id: "tx", k: "3", name: "Transactions", href: "/transactions", badge: unfiled || undefined },
     { id: "budgets", k: "4", name: "Budgets", href: "/budgets" },
+    { id: "receipts", k: "8", name: "Receipts", href: "/receipts" },
     { id: "settings", k: "0", name: "Settings", href: "/settings" },
   ];
 }

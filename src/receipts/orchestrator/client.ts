@@ -1,5 +1,5 @@
 import OpenAI from "openai";
-import { env, hasLLM } from "@/lib/env";
+import { env, hasLLM } from "@/receipts/env";
 
 /**
  * OpenRouter speaks the OpenAI wire protocol, so the official SDK works

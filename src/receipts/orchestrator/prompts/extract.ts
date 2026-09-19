@@ -1,4 +1,4 @@
-import { categoryPromptList } from "@/lib/categories";
+import { categoryPromptList } from "@/receipts/categories";
 
 /**
  * Prompt version is written to every ProcessingRun row. When accuracy moves,

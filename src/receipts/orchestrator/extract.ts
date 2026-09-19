@@ -1,4 +1,4 @@
-import { env } from "@/lib/env";
+import { env } from "@/receipts/env";
 import { llm, LLMResponseError, readUsage, type Usage } from "./client";
 import {
   ExtractedReceiptSchema,

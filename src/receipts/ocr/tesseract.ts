@@ -1,6 +1,6 @@
 import path from "node:path";
 import { createWorker, PSM, type Worker } from "tesseract.js";
-import { env } from "@/lib/env";
+import { env } from "@/receipts/env";
 
 /**
  * Pooled Tesseract recognition.

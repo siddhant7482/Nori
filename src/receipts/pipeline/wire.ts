@@ -1,5 +1,5 @@
-import type { ExtractedReceipt } from "@/lib/orchestrator/schemas";
-import type { ReconcileWarning } from "@/lib/orchestrator/reconcile";
+import type { ExtractedReceipt } from "@/receipts/orchestrator/schemas";
+import type { ReconcileWarning } from "@/receipts/orchestrator/reconcile";
 
 /**
  * The wire contract for /api/receipts/analyze.

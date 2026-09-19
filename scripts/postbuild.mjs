@@ -1,4 +1,4 @@
-import { cpSync, existsSync, rmSync } from "node:fs";
+import { cpSync, existsSync, readdirSync, rmSync } from "node:fs";
 import { join } from "node:path";
 
 /* ============================================================
@@ -30,3 +30,15 @@ if (existsSync("public")) {
   replace("public", join(SA, "public"));
   console.log("postbuild: public");
 }
+
+/* sharp's native half (libvips) is NOT traced into standalone: tracing
+ * finds the .node loader but not the shared library it loads, which
+ * builds cleanly and then fails on the first receipt. The packages are
+ * copied whole, with pnpm's symlinks kept as symlinks, because on Linux
+ * libvips is a separate package linked in beside the loader. (Vault
+ * learned this the hard way; the glob that looks like the fix crashes
+ * Turbopack.) */
+const PNPM = "node_modules/.pnpm";
+const natives = existsSync(PNPM) ? readdirSync(PNPM).filter((d) => d.startsWith("@img+sharp-")) : [];
+for (const d of natives) replace(join(PNPM, d), join(SA, PNPM, d));
+console.log(`postbuild: sharp natives · ${natives.join(", ") || "none found"}`);

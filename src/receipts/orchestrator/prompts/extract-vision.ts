@@ -1,4 +1,4 @@
-import { categoryPromptList } from "@/lib/categories";
+import { categoryPromptList } from "@/receipts/categories";
 
 export const EXTRACT_VISION_PROMPT_VERSION = "extract-vision@v2";
 

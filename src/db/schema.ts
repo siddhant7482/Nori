@@ -142,6 +142,38 @@ export const settings = pgTable("settings", {
   payPayer: text("pay_payer"),
 });
 
+/** A photograph of a receipt, and what Nori read off it. The image
+ *  itself lives in Vault; this is the link and the figures. */
+export const receiptStatus = pgEnum("receipt_status", ["reading", "matched", "unmatched", "failed"]);
+
+export const receipts = pgTable("receipts", {
+  id: serial("id").primaryKey(),
+  /** Where the photograph is in Vault. */
+  vaultId: integer("vault_id").notNull(),
+  vaultKey: text("vault_key").notNull(),
+  name: text("name").notNull(),
+  bytes: integer("bytes").notNull(),
+  status: receiptStatus("status").notNull().default("reading"),
+  /** The payment it belongs to, once it is known. */
+  txId: text("tx_id").references(() => transactions.id, { onDelete: "set null" }),
+  /** "you" or "figures": who decided which payment this is. */
+  linkedBy: text("linked_by"),
+  merchant: text("merchant"),
+  total: pence("total"),
+  currency: text("currency"),
+  purchasedAt: date("purchased_at", { mode: "string" }),
+  cardLast4: text("card_last4"),
+  items: jsonb("items").$type<{ name: string; total: number; quantity?: number | null }[]>(),
+  /** What the arithmetic check disagreed with. */
+  warnings: jsonb("warnings").$type<string[]>(),
+  /** Read on the node, or sent to the model. */
+  path: text("path"),
+  ocrConfidence: integer("ocr_confidence"),
+  detail: text("detail"),
+  createdAt: ts("created_at").notNull().defaultNow(),
+  updatedAt: ts("updated_at").notNull().defaultNow(),
+});
+
 export const syncRuns = pgTable("sync_runs", {
   id: serial("id").primaryKey(),
   mode: text("mode").notNull(),
@@ -155,3 +187,4 @@ export const syncRuns = pgTable("sync_runs", {
 export type Category = typeof categories.$inferSelect;
 export type Transaction = typeof transactions.$inferSelect;
 export type Rule = typeof rules.$inferSelect;
+export type Receipt = typeof receipts.$inferSelect;

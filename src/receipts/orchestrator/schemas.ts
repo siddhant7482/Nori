@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { CATEGORY_SLUGS } from "@/lib/categories";
+import { CATEGORY_SLUGS } from "@/receipts/categories";
 
 /**
  * The extraction contract.

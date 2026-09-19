@@ -1,11 +1,11 @@
-import { env, hasLLM } from "@/lib/env";
-import { preprocessReceipt } from "@/lib/ocr/preprocess";
-import { recognize, type OcrWord } from "@/lib/ocr/tesseract";
-import { extractReceipt } from "@/lib/orchestrator/extract";
-import { extractReceiptFromImage } from "@/lib/orchestrator/extract-vision";
-import { reconcile, type ReconcileWarning } from "@/lib/orchestrator/reconcile";
-import { LLMDisabledError, LLMResponseError } from "@/lib/orchestrator/client";
-import type { ExtractedReceipt } from "@/lib/orchestrator/schemas";
+import { env, hasLLM } from "@/receipts/env";
+import { preprocessReceipt } from "@/receipts/ocr/preprocess";
+import { recognize, type OcrWord } from "@/receipts/ocr/tesseract";
+import { extractReceipt } from "@/receipts/orchestrator/extract";
+import { extractReceiptFromImage } from "@/receipts/orchestrator/extract-vision";
+import { reconcile, type ReconcileWarning } from "@/receipts/orchestrator/reconcile";
+import { LLMDisabledError, LLMResponseError } from "@/receipts/orchestrator/client";
+import type { ExtractedReceipt } from "@/receipts/orchestrator/schemas";
 
 /**
  * The receipt pipeline, end to end: bytes in, structured analysis out.

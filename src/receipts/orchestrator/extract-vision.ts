@@ -1,5 +1,5 @@
-import { env } from "@/lib/env";
-import { prepareForVision } from "@/lib/ocr/preprocess";
+import { env } from "@/receipts/env";
+import { prepareForVision } from "@/receipts/ocr/preprocess";
 import { llm, LLMResponseError, readUsage } from "./client";
 import {
   ExtractedReceiptSchema,

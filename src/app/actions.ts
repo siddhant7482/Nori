@@ -3,8 +3,9 @@
 import { and, eq, isNull } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
 import { db } from "@/db";
-import { categories, rules, settings, transactions } from "@/db/schema";
+import { categories, receipts, rules, settings, transactions } from "@/db/schema";
 import { normalise } from "@/lib/filing";
+import { gbp } from "@/lib/format";
 import { getConnection } from "@/monzo/oauth";
 import { refile, syncOnce } from "@/monzo/sync";
 
@@ -84,6 +85,27 @@ export async function deleteRule(id: number): Promise<Result> {
   if (!r) return { ok: false, message: "That rule is already gone." };
   await refile();
   return done(`Forgot the rule for ${r.label}. Its payments fall back to Monzo's category, or unfiled.`);
+}
+
+/** Say which payment a receipt belongs to, or take it off one. A
+ *  person's answer is final: reading it again never moves it. */
+export async function linkReceipt(receiptId: number, txId: string | null): Promise<Result> {
+  const [r] = await db
+    .update(receipts)
+    .set({ txId, linkedBy: txId ? "you" : null, status: txId ? "matched" : "unmatched", detail: txId ? null : "You unlinked this one.", updatedAt: new Date() })
+    .where(eq(receipts.id, receiptId))
+    .returning();
+  if (!r) return { ok: false, message: "That receipt is gone." };
+  if (!txId) return done("Unlinked. It waits for the right payment.");
+  const [t] = await db.select().from(transactions).where(eq(transactions.id, txId));
+  return done(`Attached to ${t?.merchantName ?? t?.description ?? "the payment"}${t ? ` · ${gbp(-t.amount)}` : ""}.`);
+}
+
+/** Forgets the reading. The photograph stays in Vault, which is where
+ *  files are deleted from. */
+export async function forgetReceipt(receiptId: number): Promise<Result> {
+  const [r] = await db.delete(receipts).where(eq(receipts.id, receiptId)).returning({ name: receipts.name });
+  return r ? done(`Forgot ${r.name}. The photograph is still in Vault.`) : { ok: false, message: "That receipt is already gone." };
 }
 
 export async function syncNow(): Promise<Result> {
