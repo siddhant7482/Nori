@@ -4,6 +4,7 @@ import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { gbp, words } from "@/lib/format";
+import { logout } from "@/app/login/actions";
 import { afford, type AffordIn, type Voice } from "@/lib/month";
 import { Afford } from "./Afford";
 import { Icon } from "./icons";
@@ -310,6 +311,7 @@ function Palette({ q: initial, screens, payments, unfiled, affordIn, onClose, go
     for (const s of screens) if (!ql || s.name.toLowerCase().includes(ql)) out.push({ g: "Go to", icon: s.id, label: s.name, hint: (s.badge ? `${s.badge} new · ` : "") + "press " + s.k, run: () => go(s.href) });
     if (!m && (!ql || "can i afford it".includes(ql))) out.push({ g: "Do", glyph: "£?", label: "Can I afford it?", hint: "press A", run: () => ask(60) });
     if (unfiled.count && (!ql || "file unfiled payments".includes(ql))) out.push({ g: "Do", glyph: String(unfiled.count), label: `File ${words(unfiled.count)} unfiled payment${unfiled.count === 1 ? "" : "s"}`, hint: gbp(unfiled.total), run: () => go("/transactions?show=unfiled") });
+    if (ql && "sign out log out".includes(ql)) out.push({ g: "Do", glyph: "↪", label: "Sign out of Nori on this device", hint: "", run: () => void logout() });
     if (ql.length >= 2 && !m) for (const p of payments.filter((p) => p.search.includes(ql)).slice(0, 8)) out.push({ g: "Payments", icon: "tx", label: p.label, hint: p.hint, run: () => go(`/transactions?tx=${encodeURIComponent(p.id)}`) });
     return out;
   }, [q, screens, payments, unfiled, affordIn, go, ask]);

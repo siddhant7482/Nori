@@ -417,3 +417,15 @@ a.btn { display: inline-block; }
 .drawer .card.cat .a { font-size: 1.8rem; }
 .drawer .fb { font-size: .78rem; color: var(--t2); margin-top: .5rem; }
 .tx.sel { background: #f5faf6; border-radius: 12px; }
+
+/* ---------- the login ---------- */
+.login { min-height: 100vh; min-height: 100dvh; display: grid; place-items: center; padding-inline: 16px; background: radial-gradient(1000px 520px at 6% -14%, #d3f1dd 0, transparent 60%), radial-gradient(820px 480px at 106% 4%, #e6f6d6 0, transparent 55%), var(--bg); }
+.login-card { width: min(400px, 100%); box-sizing: border-box; background: var(--card); border-radius: 30px; padding: 1.8rem 1.7rem 1.6rem; box-shadow: 0 30px 70px -40px rgba(14, 92, 58, .6); display: grid; gap: .6rem; }
+.login-card .brand { color: var(--forest); font-size: 1.7rem; }
+.login-card h1 { margin: .4rem 0 0; font-family: var(--display); font-weight: 600; font-size: 1.5rem; letter-spacing: -.03em; }
+.login-card .sub { margin: 0; }
+.login-form { display: grid; gap: .8rem; margin-top: .4rem; }
+.login-form input[type="password"] { width: 100%; box-sizing: border-box; padding: .75rem .85rem; border: 1.5px solid var(--line-2); border-radius: 14px; background: #fbfdfb; font-size: 1rem; color: var(--text); }
+.login-form .btn { padding: .75rem 1rem; font-size: .95rem; }
+.login-err { min-height: 1.3em; margin: 0; font-size: .86rem; color: var(--over-ink); }
+.vh { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0; padding: 0; }

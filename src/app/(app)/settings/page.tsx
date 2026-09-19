@@ -7,6 +7,8 @@ import { affordInput, afford, affordText } from "@/lib/month";
 import { describeRule } from "@/lib/payday";
 import { hasEncryptionKey } from "@/lib/crypto";
 import { isConfigured } from "@/monzo/oauth";
+import { logout } from "@/app/login/actions";
+import { SESSION_DAYS } from "@/lib/session";
 
 /* ============================================================
    0 · SETTINGS. Nothing here moves money: the Monzo connection is
@@ -96,6 +98,11 @@ export default async function Settings({ searchParams }: { searchParams: Promise
             <Hd title="What Nori will never do" />
             <p className="howto">Text you. Email you. Message a friend. Nudge whoever owes you money.</p>
             <p className="howto" style={{ marginTop: ".7rem", color: "var(--t2)" }}>The pressure lives in here and on your CommandHQ hub, nowhere else. It is the same arithmetic Warden uses, without Warden&apos;s witnesses.</p>
+          </div>
+          <div className="card">
+            <Hd title="This device" right={`SIGNED IN FOR ${SESSION_DAYS} DAYS`} />
+            <p className="sub">Nori asks for its password once per device, then remembers it. Lost a phone? Changing Nori&apos;s session secret on the node signs every device out at once.</p>
+            <form action={logout}><button className="btn ghost" type="submit">Sign out here</button></form>
           </div>
         </div>
       </div>
