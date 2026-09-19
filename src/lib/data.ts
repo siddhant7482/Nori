@@ -4,6 +4,7 @@ import { db } from "@/db";
 import { categories, connection, pots, rules, settings, syncRuns, transactions } from "@/db/schema";
 import { addDays, today as londonToday, type Day } from "./london";
 import { computeMonth, type Month, type TxIn } from "./month";
+import { doubleCharges, findRecurring, keyOf, stillDue, type DoubleCharge, type Due, type Series } from "./recurring";
 import { cycleFor, detectPayday, pastCycles, type Payday } from "./payday";
 
 /* ============================================================
@@ -44,6 +45,9 @@ const toTxIn = (t: typeof transactions.$inferSelect): TxIn => ({
 
 export interface Picture {
   month: Month;
+  /** Every recurring payment Nori has found, soonest due first. */
+  series: Series[];
+  doubles: DoubleCharge[];
   pay: Payday | null;
   voice: "clean" | "direct" | "warden";
   paydayRule: string;
@@ -73,14 +77,22 @@ export const getPicture = cache(async (): Promise<Picture> => {
   ]);
   const pay = detectPayday(credits);
   const cycle = cycleFor(day, pay, set?.paydayRule ?? "auto");
-  const rows = await db
+  /* A year and a bit, because three occurrences is the floor for
+   * calling something recurring and a yearly bill needs the room. */
+  const history = await db
     .select()
     .from(transactions)
-    .where(and(gte(transactions.day, cycle.start), lte(transactions.day, day)));
-  const month = computeMonth({ cats, txs: rows.map(toTxIn), cycle, today: day });
+    .where(and(gte(transactions.day, addDays(day, -400)), lte(transactions.day, day)));
+  const series = findRecurring(history, day);
+  const rows = history.filter((t) => t.day >= cycle.start);
+  const seen = new Set(rows.filter((t) => t.kind === "spend").map(keyOf));
+  const due: Due[] = stillDue(series, day, cycle.end, seen);
+  const month = computeMonth({ cats, txs: rows.map(toTxIn), cycle, today: day, due });
   const [{ n: txCount }] = await db.select({ n: sql<number>`count(*)::int` }).from(transactions);
   return {
     month,
+    series,
+    doubles: doubleCharges(history, cycle.start),
     pay,
     voice: (set?.voice as Picture["voice"]) ?? "direct",
     paydayRule: set?.paydayRule ?? "auto",

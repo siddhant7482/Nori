@@ -6,6 +6,7 @@ import { getPicture } from "@/lib/data";
 import { gbp, list, pct, plain, round, words } from "@/lib/format";
 import { addDays, short, weekdayName } from "@/lib/london";
 import { affordInput, catById, dayOfCycle, type CatOut, type Month } from "@/lib/month";
+import { describeCadence } from "@/lib/recurring";
 
 /* ============================================================
    1 · HOME. The number, the one thing most wrong, and what needs
@@ -55,7 +56,7 @@ export default async function Home() {
           <h2>{said.head}</h2>
           <p>{said.body}</p>
           <div className="ft">
-            <Link className="lnk" href={story ? `/transactions?cat=${story.id}` : "/transactions"}>See where it went →</Link>
+            <Link className="lnk" href="/budgets">Open the IOU book →</Link>
             <span className="eb">Voice: {pic.voice}</span>
           </div>
         </div>
@@ -105,7 +106,7 @@ function Big({ m }: { m: Month }) {
       <span className="k">Left to spend, each day, until payday</span>
       <div className="n">£{pounds}<small>.{pence}</small><em>a day</em></div>
       <p>
-        For the next <b>{words(m.cycle.daysLeft)} days</b>, today included, everything except bills. You&apos;ve averaged <b>{gbp(Math.round(m.dailySpent / m.cycle.dayIndex))}</b> a day so far; the budgets allowed {gbp(m.allow)}.
+        For the next <b>{words(m.cycle.daysLeft)} days</b>, today included{m.reserved ? <>, after holding back <b>{gbp(m.reserved)}</b> for what&apos;s still to leave</> : ""}. You&apos;ve averaged <b>{gbp(Math.round(m.dailySpent / m.cycle.dayIndex))}</b> a day so far; the budgets allowed {gbp(m.allow)}.
       </p>
       <div className="meter">
         <div className="lb"><span>SPENT {gbp(m.dailySpent)} OF {gbp(m.dailyLimit)}</span><span>{used}%</span></div>
@@ -121,7 +122,7 @@ function Big({ m }: { m: Month }) {
 
 function Kpis({ m, paid }: { m: Month; paid: { amount: number; from: string } | null }) {
   const fixed = m.cats.filter((k) => k.fixed);
-  const billsSpent = fixed.reduce((n, k) => n + k.spent, 0), billsLimit = fixed.reduce((n, k) => n + k.limit, 0);
+  const billsSpent = fixed.reduce((n, k) => n + k.spent, 0);
   const hot = m.dailyLimit > 0 && m.proj > m.dailyLimit;
   const pay = paid?.amount ?? m.income;
   return (
@@ -133,7 +134,11 @@ function Kpis({ m, paid }: { m: Month; paid: { amount: number; from: string } | 
         <b>{gbp(m.dailySpent)}</b>
         <em>of {m.dailyLimit ? gbp(m.dailyLimit) : "no budgets yet"}{hot ? <> · <span className="tag over">OVER PACE</span> heading for {round(m.proj)}</> : null}</em>
       </div>
-      <div className="kpi"><small>Bills</small><b>{gbp(billsSpent)}</b><em>{billsLimit > billsSpent ? `${gbp(billsLimit - billsSpent)} still to leave before payday` : billsLimit ? "all paid for this cycle" : "no bills budget set"}</em></div>
+      <div className={"kpi" + (m.committed ? " hot" : "")}>
+        <small>Still to leave</small>
+        <b>{gbp(m.committed)}</b>
+        <em>{m.due.length ? <>{m.due.length === 1 ? "one payment" : `${m.due.length} payments`} before payday · <Link className="lnk" href="/budgets">see them</Link></> : <>nothing recurring is still expected · bills so far {gbp(billsSpent)}</>}</em>
+      </div>
     </div>
   );
 }
@@ -229,6 +234,9 @@ function Needs({ pic }: { pic: Awaited<ReturnType<typeof getPicture>> }) {
     const to = catById(m, i.to)!, from = catById(m, i.from)!;
     items.push({ t: i.day ? short(dayOfCycle(m, i.day)).toUpperCase() : "IOU", href: `/transactions?cat=${to.id}`, hot: true, s: <><b>{to.name} went over.</b> {from.name} lent it {gbp(i.amount)} and has that much less.</> });
   }
+  for (const d of m.due.filter((x) => x.overdue)) items.push({ t: "LATE", href: "/budgets", hot: true, s: <><b>{d.series.label} hasn&apos;t arrived.</b> {gbp(d.amount)} was expected {short(d.series.due)}, and it&apos;s still being held back from the daily number.</> });
+  for (const s of pic.series.filter((x) => x.changed && x.last.day >= m.cycle.start)) items.push({ t: short(s.last.day).toUpperCase(), href: "/budgets", s: <><b>{s.label} {s.changed!.pct > 0 ? "went up" : "went down"} {Math.abs(s.changed!.pct)}%.</b> {gbp(s.changed!.from)} to {gbp(s.changed!.to)}, {describeCadence(s)}. Nobody told you; the statement did.</> });
+  for (const d of pic.doubles) items.push({ t: short(d.day).toUpperCase(), href: `/transactions?q=${encodeURIComponent(d.label)}`, hot: true, s: <><b>{d.label} charged {gbp(d.amount)} twice</b> within the hour. If that wasn&apos;t two things, it&apos;s worth a look.</> });
   const slip = m.cats.filter((k) => k.daily && k.spent <= k.limit && k.pace > k.eff);
   if (slip.length) items.push({ t: "PACE", href: `/transactions?cat=${slip[0].id}`, s: <><b>{list(slip.map((k) => k.name))}</b> {slip.length > 1 ? "are" : "is"} on pace to finish over, though {slip.length > 2 ? "none is" : slip.length > 1 ? "neither is" : "it isn't"} yet.</> });
   const unset = m.cats.filter((k) => !k.fixed && !k.limit);

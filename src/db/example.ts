@@ -1,4 +1,4 @@
-import { addDays, type Day } from "@/lib/london";
+import { addDays, make, ymd, type Day } from "@/lib/london";
 
 /* ============================================================
    THE EXAMPLE CYCLE: the same month as the design mock, as rows.
@@ -101,13 +101,38 @@ export function exampleTransactions(): ExampleTx[] {
     bills: [113100, 113100, 113800, 114000, 114200],
   };
   const NAMES: Record<string, string[]> = { groc: ["Sainsbury's", "Tesco", "Lidl"], eat: ["Leon", "Deliveroo", "Pret A Manger"], trans: ["TfL", "Trainline"], shop: ["Amazon", "Boots"], bills: ["J Patel"] };
+  /* The bills that repeat, on the dates they repeat on, so the example
+   * exercises "still to leave" the way a real account does: the rent
+   * and the council tax have already gone this cycle; the energy bill
+   * on the 15th and the subscription on the 20th have not. */
+  const bill = (day: Day, name: string, amount: number, cat: string) =>
+    out.push({
+      id: `tx_example_b_${name.toLowerCase().replace(/[^a-z]+/g, "")}_${day}`,
+      day,
+      amount: -amount,
+      kind: "spend",
+      categoryId: cat,
+      description: name.toUpperCase(),
+      merchantName: cat === "bills" ? null : name,
+      counterpartyName: cat === "bills" ? name : null,
+      potId: null,
+      monzoCategory: MONZO_CAT[cat],
+    });
+  for (let i = 0; i < 5; i++) {
+    const { y, m } = ymd(pays[i][0]);
+    bill(make(y, m + 1, 1), "J Patel", 95000, "bills");
+    bill(make(y, m + 1, 5), "LB Camden", 14200, "bills");
+    bill(make(y, m + 1, 15), "Octopus Energy", HIST.bills[i] - 95000 - 14200, "bills");
+    bill(make(y, m + 1, 20), "Spotify", 1199, "shop");
+  }
   for (let i = 0; i < 5; i++) {
     const from = pays[i][0];
     for (const [cat, totals] of Object.entries(HIST)) {
-      const parts = cat === "bills" ? 1 : 5;
+      if (cat === "bills") continue;
+      const parts = 5;
       const each = Math.floor(totals[i] / parts);
       for (let k = 0; k < parts; k++) {
-        const amount = k === parts - 1 ? totals[i] - each * (parts - 1) : each;
+        const amount = k === parts - 1 ? totals[i] - each * (parts - 1) - (cat === "shop" ? 1199 : 0) : each;
         const name = NAMES[cat][k % NAMES[cat].length];
         out.push({ id: `tx_example_h${i}_${cat}_${k}`, day: addDays(from, 2 + k * 5), amount: -amount, kind: "spend", categoryId: cat, description: name.toUpperCase(), merchantName: cat === "bills" ? null : name, counterpartyName: cat === "bills" ? name : null, potId: null, monzoCategory: MONZO_CAT[cat] });
       }

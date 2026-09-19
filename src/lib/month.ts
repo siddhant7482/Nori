@@ -1,6 +1,7 @@
 import { cap, gbp, list, nth, round, words } from "./format";
 import { addDays, diff, short, ymd, type Day } from "./london";
 import type { Cycle } from "./payday";
+import { dueTotal, type Due } from "./recurring";
 
 /* ============================================================
    THE CYCLE, as arithmetic.
@@ -14,6 +15,10 @@ import type { Cycle } from "./payday";
      ÷ the days still to get through, today included.
    Today counts as a day left, which is the honest reading in the
    morning and never divides by zero on the last day.
+
+   What is already decided is set aside first. Rent and the direct
+   debits that have not left yet are not spending money, so the daily
+   number reserves them: "left a day" is what is free after them.
 
    An over budget BORROWS, visibly: the shortfall comes out of the
    budget with the most room, the lender really does have less, and
@@ -42,6 +47,8 @@ export interface TxIn {
 }
 
 export interface CatOut extends CatIn {
+  /** Recurring payments still to leave this budget before payday. */
+  due: number;
   /** What came out of it this cycle, refunds netted off. */
   spent: number;
   /** The budget after IOUs: less if it lent, more if it borrowed. */
@@ -70,6 +77,15 @@ export type Said = Record<Voice, { head: string; body: string }>;
 
 export interface Month {
   cycle: Cycle;
+  /** Recurring payments still to leave before payday, soonest first. */
+  due: Due[];
+  /** All of it, whatever budget it belongs to. */
+  committed: number;
+  /** The part of it that comes out of the budgets you spend from, and
+   *  so is held back from the daily number. */
+  reserved: number;
+  /** What the daily number would have been without reserving. */
+  leftADayBefore: number;
   today: Day;
   cats: CatOut[];
   income: number;
@@ -97,14 +113,15 @@ export interface Month {
  *  (positive in Monzo) nets off whatever it refunds. */
 export const spentOf = (t: { amount: number }) => -t.amount;
 
-export function computeMonth(input: { cats: CatIn[]; txs: TxIn[]; cycle: Cycle; today: Day }): Month {
+export function computeMonth(input: { cats: CatIn[]; txs: TxIn[]; cycle: Cycle; today: Day; due?: Due[] }): Month {
   const { cycle, today } = input;
+  const due = input.due ?? [];
   const { daysIn, dayIndex, daysLeft } = cycle;
   const inCycle = input.txs.filter((t) => t.day >= cycle.start && t.day <= today);
 
   const cats: CatOut[] = [...input.cats]
     .sort((a, b) => a.position - b.position)
-    .map((c) => ({ ...c, spent: 0, eff: c.limit, daily: !c.fixed && c.limit > 0, byDay: new Array(daysIn).fill(0), room: 0, perDayLeft: 0, perDaySoFar: 0, pace: 0, crossDay: null }));
+    .map((c) => ({ ...c, spent: 0, due: 0, eff: c.limit, daily: !c.fixed && c.limit > 0, byDay: new Array(daysIn).fill(0), room: 0, perDayLeft: 0, perDaySoFar: 0, pace: 0, crossDay: null }));
   const byId = new Map(cats.map((c) => [c.id, c]));
 
   const unfiled: TxIn[] = [];
@@ -118,6 +135,11 @@ export function computeMonth(input: { cats: CatIn[]; txs: TxIn[]; cycle: Cycle; 
       c.spent += spentOf(t);
       c.byDay[diff(cycle.start, t.day)] += spentOf(t);
     }
+  }
+
+  for (const d of due) {
+    const c = d.series.categoryId ? byId.get(d.series.categoryId) : undefined;
+    if (c) c.due += d.amount;
   }
 
   for (const c of cats) {
@@ -146,13 +168,19 @@ export function computeMonth(input: { cats: CatIn[]; txs: TxIn[]; cycle: Cycle; 
 
   for (const c of cats) {
     c.room = c.eff - c.spent;
-    c.perDayLeft = Math.max(0, Math.round(c.room / daysLeft));
+    c.perDayLeft = Math.max(0, Math.round((c.room - Math.min(c.due, Math.max(0, c.room))) / daysLeft));
     c.perDaySoFar = Math.round(c.spent / dayIndex);
     c.pace = Math.round((c.spent / dayIndex) * daysIn);
   }
 
   const dailyLimit = daily.reduce((n, c) => n + c.limit, 0);
   const dailySpent = daily.reduce((n, c) => n + c.spent, 0);
+  /* Only what a budget can still cover is held back: a bill bigger
+   * than what is left of its budget is already an overspend, and
+   * reserving money that is not there would make the daily number
+   * negative rather than honest. */
+  const reserved = daily.reduce((n, c) => n + Math.min(c.due, Math.max(0, c.eff - c.spent)), 0);
+  const free = dailyLimit - dailySpent - reserved;
   const byDay = new Array(daysIn).fill(0);
   for (const c of daily) c.byDay.forEach((v, i) => (byDay[i] += v));
 
@@ -165,7 +193,11 @@ export function computeMonth(input: { cats: CatIn[]; txs: TxIn[]; cycle: Cycle; 
     dailyLimit,
     dailySpent,
     allow: Math.round(dailyLimit / daysIn),
-    leftADay: Math.max(0, Math.round((dailyLimit - dailySpent) / daysLeft)),
+    due,
+    committed: dueTotal(due),
+    reserved,
+    leftADay: Math.max(0, Math.round(free / daysLeft)),
+    leftADayBefore: Math.max(0, Math.round((dailyLimit - dailySpent) / daysLeft)),
     proj: Math.round((dailySpent / dayIndex) * daysIn),
     ious,
     unfiled,
@@ -251,6 +283,8 @@ function speak(m: Month): Said {
    ------------------------------------------------------------ */
 export interface AffordIn {
   daysLeft: number;
+  /** Already spoken for before payday, and so not spendable. */
+  reserved: number;
   leftADay: number;
   dailyLimit: number;
   dailySpent: number;
@@ -265,7 +299,7 @@ export type Afford =
 
 export function afford(a: AffordIn, p: number, catId: string | null): Afford | null {
   if (!(p > 0)) return null;
-  const left = a.dailyLimit - a.dailySpent;
+  const left = a.dailyLimit - a.dailySpent - a.reserved;
   const after = left - p;
   const base = { p, left, before: a.leftADay };
   if (after < 0) return { kind: "no", ...base, short: -after };
@@ -309,10 +343,13 @@ export function affordText(r: Afford, v: Voice, daysLeft: number): string {
 export function affordInput(m: Month): AffordIn {
   return {
     daysLeft: m.cycle.daysLeft,
+    reserved: m.reserved,
     leftADay: m.leftADay,
     dailyLimit: m.dailyLimit,
     dailySpent: m.dailySpent,
     iouCount: m.ious.length,
-    cats: m.cats.map((c) => ({ id: c.id, name: c.name, room: c.room, daily: c.daily, position: c.position })),
+    /* A budget's room is what is left after what it still owes: a
+     * fiver of grocery budget that rent will take is not a fiver. */
+    cats: m.cats.map((c) => ({ id: c.id, name: c.name, room: Math.max(0, c.room - c.due), daily: c.daily, position: c.position })),
   };
 }

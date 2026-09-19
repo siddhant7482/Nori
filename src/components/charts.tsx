@@ -1,5 +1,5 @@
-import { gbp } from "@/lib/format";
-import { addDays, short, weekdayName, type Day } from "@/lib/london";
+import { gbp, round } from "@/lib/format";
+import { addDays, diff, short, weekdayName, type Day } from "@/lib/london";
 
 /* ============================================================
    Charts, in Canopy's palette. Every colour here was run through
@@ -138,6 +138,92 @@ export function Daily({ story, other, storyName, allow, leftADay, daysIn, dayInd
           {short(addDays(start, d - 1))}
         </text>
       ))}
+    </svg>
+  );
+}
+
+/* ---------- one budget, against its own line ----------
+   The curve is what you have spent, day by day. Where it crosses the
+   budget it turns orange and says OVER, with the date. The dotted
+   line carries today's pace to payday; the dashed sage line is what
+   staying inside the budget would have looked like all along.
+
+   When a budget has lent or borrowed, BOTH lines are drawn: the
+   original faint and dashed, the one it actually has now, solid. A
+   bill still to come is a dashed step up from today, because that
+   money is already spent, it just hasn't left yet.
+   ---------- */
+export function Pace({ name, byDay, limit, eff, spent, daysIn, dayIndex, daysLeft, start, due, narrow = false }: { name: string; byDay: number[]; limit: number; eff: number; spent: number; daysIn: number; dayIndex: number; daysLeft: number; start: Day; due: { day: Day; amount: number; label: string }[]; narrow?: boolean }) {
+  const W = 700, H = 250, m = { l: 48, r: narrow ? 14 : 116, t: 22, b: 28 };
+  const iw = W - m.l - m.r, ih = H - m.t - m.b;
+  const proj = Math.round((spent / dayIndex) * daysIn);
+  const dueTotal = due.reduce((n, d) => n + d.amount, 0);
+  const step = limit > 40000 ? 20000 : limit > 12000 ? 5000 : 2000;
+  const max = Math.max(step, Math.ceil(Math.max(limit * 1.2, eff * 1.1, proj * 1.05, (spent + dueTotal) * 1.05) / step) * step);
+  const X = (d: number) => m.l + (d / daysIn) * iw;
+  const Y = (v: number) => m.t + ih - (v / max) * ih;
+  const pts: [number, number][] = [[X(0), Y(0)]];
+  let run = 0;
+  for (let d = 1; d <= dayIndex; d++) {
+    run += byDay[d - 1] ?? 0;
+    pts.push([X(d), Y(run)]);
+  }
+  const moved = eff !== limit;
+  const sp = limit > 0 ? splitAt(pts, Y(limit)) : null;
+  const crossed = sp ? Math.ceil(((sp.after[0][0] - m.l) / iw) * daysIn) : 0;
+  const ticks = [0, 1, 2, 3, 4].map((i) => (max / 4) * i);
+  const labelDays = [1, Math.round(daysIn / 4), Math.round(daysIn / 2), Math.round((3 * daysIn) / 4), daysIn];
+  const labels: { y: number; a: string; b: string; w: number }[] = [
+    { y: Y(proj), a: gbp(proj), b: "at this pace", w: 800 },
+    moved ? { y: Y(eff), a: `after IOU ${round(eff)}`, b: `was ${round(limit)}`, w: 700 } : { y: Y(limit), a: `budget ${round(limit)}`, b: "", w: 600 },
+  ].sort((a, b) => a.y - b.y);
+  if (labels[1].y - labels[0].y < 30) labels[1].y = labels[0].y + 30;
+  let acc = spent;
+  return (
+    <svg width="100%" viewBox={`0 0 ${W} ${H}`} role="img" aria-label={`${name} against its budget`} className="pace">
+      {ticks.map((v) => (
+        <g key={v}>
+          <line x1={m.l} x2={W - m.r} y1={f(Y(v))} y2={f(Y(v))} stroke={P.grid} />
+          <text x={m.l - 6} y={f(Y(v) + 4)} fontSize={10} fill={P.ink2} textAnchor="end" className="mono">£{Math.round(v / 100)}</text>
+        </g>
+      ))}
+      {limit > 0 && <line x1={m.l} x2={f(X(daysIn))} y1={f(Y(limit))} y2={f(Y(limit))} stroke={P.text} strokeWidth={1} strokeDasharray={moved ? "3 3" : undefined} opacity={moved ? 0.45 : 0.6} />}
+      {moved && <line x1={m.l} x2={f(X(daysIn))} y1={f(Y(eff))} y2={f(Y(eff))} stroke={P.text} strokeWidth={1.5} />}
+      {eff > 0 && <line x1={f(X(0))} y1={f(Y(0))} x2={f(X(daysIn))} y2={f(Y(eff))} stroke={P.ctx} strokeWidth={1.5} strokeDasharray="5 4" />}
+      <path d={`M${f(X(dayIndex))},${f(Y(spent))}L${f(X(daysIn))},${f(Y(proj))}`} fill="none" stroke={P.story} strokeWidth={2} strokeDasharray="2 4" strokeLinecap="round" />
+      {due.map((d, i) => {
+        const at = Math.min(daysIn, diff(start, d.day) + 1);
+        const from = acc;
+        acc += d.amount;
+        return <path key={i} d={`M${f(X(Math.max(dayIndex, at - 1)))},${f(Y(from))}L${f(X(at))},${f(Y(from))}L${f(X(at))},${f(Y(acc))}`} fill="none" stroke={P.ink2} strokeWidth={1.5} strokeDasharray="4 3" data-tt={tt([`${d.label} · still to leave`, `${gbp(d.amount)} expected ${short(d.day)}`])} />;
+      })}
+      {sp ? (
+        <>
+          <path d={curve(sp.before)} fill="none" stroke={P.line} strokeWidth={2.2} />
+          <path d={curve(sp.after)} fill="none" stroke={P.over} strokeWidth={2.2} />
+          <circle cx={f(sp.after[0][0])} cy={f(Y(limit))} r={4} fill={P.over} stroke={P.surf} strokeWidth={2} />
+          <text x={f(sp.after[0][0] - 6)} y={f(Y(limit) - 9)} fontSize={10.5} fontWeight={700} fill={P.over} textAnchor="end">OVER from {short(addDays(start, crossed - 1))}</text>
+        </>
+      ) : (
+        <path d={curve(pts)} fill="none" stroke={P.line} strokeWidth={2.2} />
+      )}
+      <circle cx={f(X(dayIndex))} cy={f(Y(spent))} r={5} fill={limit > 0 && spent > limit ? P.over : P.line} stroke={P.surf} strokeWidth={2} />
+      <circle cx={f(X(daysIn))} cy={f(Y(proj))} r={4} fill={P.surf} stroke={P.story} strokeWidth={2} />
+      {!narrow &&
+        labels.map((L, i) => (
+          <g key={i}>
+            <text x={f(X(daysIn) + 8)} y={f(L.y + 4)} fontSize={11} fontWeight={L.w} fill={P.text}>{L.a}</text>
+            {L.b && <text x={f(X(daysIn) + 8)} y={f(L.y + 17)} fontSize={10} fill={P.ink2}>{L.b}</text>}
+          </g>
+        ))}
+      {labelDays.map((d) => (
+        <text key={d} x={f(X(d))} y={H - 9} fontSize={10} textAnchor="middle" className="mono" fill={P.ink2}>{short(addDays(start, d - 1))}</text>
+      ))}
+      {Array.from({ length: dayIndex }, (_, i) => i + 1).map((d) => {
+        let upTo = 0;
+        for (let k = 0; k < d; k++) upTo += byDay[k] ?? 0;
+        return <rect key={d} x={f(X(d - 1))} y={m.t} width={f(iw / daysIn)} height={ih} fill="transparent" data-tt={tt([`${weekdayName(addDays(start, d - 1))} ${short(addDays(start, d - 1))}`, `Spent so far ${gbp(upTo)}`, `On-budget pace ${gbp(Math.round((eff / daysIn) * d))}`])} />;
+      })}
     </svg>
   );
 }

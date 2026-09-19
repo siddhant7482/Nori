@@ -1,6 +1,7 @@
 import { Hd, Head } from "@/components/bits";
-import { Budgets, FirstSync, PaydayRule, RuleList, SyncNow, VoiceDial } from "@/components/SettingsParts";
-import { allRules, getPicture, lastRuns, suggestedLimits } from "@/lib/data";
+import Link from "next/link";
+import { FirstSync, PaydayRule, RuleList, SyncNow, VoiceDial } from "@/components/SettingsParts";
+import { allRules, getPicture, lastRuns } from "@/lib/data";
 import { gbp } from "@/lib/format";
 import { short, withDay } from "@/lib/london";
 import { affordInput, afford, affordText } from "@/lib/month";
@@ -21,7 +22,7 @@ export default async function Settings({ searchParams }: { searchParams: Promise
   const sp = await searchParams;
   const pic = await getPicture();
   const m = pic.month;
-  const [ruleRows, runs, suggested] = await Promise.all([allRules(), lastRuns(5), suggestedLimits()]);
+  const [ruleRows, runs] = await Promise.all([allRules(), lastRuns(5)]);
   const catName = new Map(m.cats.map((c) => [c.id, c.name]));
 
   const sample = afford(affordInput(m), 6000, null);
@@ -108,9 +109,8 @@ export default async function Settings({ searchParams }: { searchParams: Promise
       </div>
 
       <div className="card" id="budgets">
-        <Hd title="Budgets" right="PER PAYDAY CYCLE" />
-        <p className="sub">Each budget counts in the daily number unless it&apos;s fixed. Where Nori has history, it offers what you actually spent over the last three cycles, so the first number is yours rather than a guess.</p>
-        <Budgets cats={m.cats.map((c) => ({ id: c.id, name: c.name, hex: c.hex, limit: c.limit, fixed: c.fixed, suggested: suggested[c.id] ?? null }))} />
+        <Hd title="Budgets" right="ON THE BUDGETS SCREEN" />
+        <p className="sub">Budgets are set where you can see what they are doing: <Link className="lnk" href="/budgets#set">open Budgets</Link>. {m.cats.filter((c) => !c.fixed && !c.limit).length ? "Some have no budget yet, so they aren't in the daily number." : "All of them are set."}</p>
       </div>
 
       <div className="card">
