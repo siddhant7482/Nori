@@ -42,6 +42,22 @@ ok("a monthly £40 from a friend is not mistaken for a salary", () => {
   assert.equal(detectPayday(friend), null);
 });
 
+ok("money moved in from your own other bank is not a payday", () => {
+  const self = ["2026-05-29", "2026-06-30", "2026-07-31", "2026-08-31"].map((day) => ({ day, amount: 66000, payer: "Siddhant Bhasin" }));
+  assert.ok(detectPayday(self, "2026-09-12"), "not knowing the name, it looks like one");
+  assert.equal(detectPayday(self, "2026-09-12", "Siddhant Bhasin"), null, "knowing the name, it is a transfer");
+});
+
+ok("four monthly transfers then six months of silence is not a salary", () => {
+  const stopped = ["2025-11-30", "2025-12-31", "2026-02-02", "2026-03-04", "2026-08-31"].map((day) => ({ day, amount: 100000, payer: "Someone Else" }));
+  assert.equal(detectPayday(stopped, "2026-09-12"), null);
+});
+
+ok("two salaries are not enough to build a cycle on", () => {
+  const two = ["2026-07-25", "2026-08-25"].map((day) => ({ day, amount: 276000, payer: "ACME Studio Ltd" }));
+  assert.equal(detectPayday(two, "2026-09-12"), null);
+});
+
 const cycle = cycleFor(EXAMPLE_TODAY, pay);
 ok("the cycle runs salary to salary: 25 Aug to 24 Sep, day 19 of 31", () => {
   assert.equal(cycle.start, "2026-08-25");

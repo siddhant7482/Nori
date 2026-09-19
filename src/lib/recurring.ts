@@ -9,7 +9,13 @@ import { addDays, diff, make, short, weekday, ymd, type Day } from "./london";
 
    Nothing is typed in here either. A recurring payment is found the
    way a person would: the same payee, at the same sort of interval,
-   for about the same amount, at least three times. From that come
+   for about the same amount, at least three times.
+
+   The "about the same amount" part does real work. One payee often
+   has two lives: a £35.70 travel pass every four weeks AND £5 top-ups
+   whenever; £10 of phone credit every month AND £3 in an emergency.
+   Lumped together the amounts look random and the pass is lost, so
+   payments are grouped by payee AND by amount before anything else. From that come
    three things Nori can say without being asked:
 
      · what is still due before payday
@@ -36,7 +42,10 @@ export interface RecurIn {
 }
 
 export interface Series {
+  /** The payee. One payee can have several series. */
   key: string;
+  /** Payee plus the amount it recurs at: unique per series. */
+  id: string;
   label: string;
   categoryId: string | null;
   cadence: Cadence;
@@ -125,13 +134,50 @@ export function findRecurring(txs: RecurIn[], today: Day): Series[] {
   }
 
   const out: Series[] = [];
-  for (const [key, list] of groups) {
+  for (const [key, list] of groups)
+    for (const cluster of byAmount(list)) {
+      const one = series(key, cluster, today);
+      if (one) out.push(one);
+    }
+  return out.sort((a, b) => (a.due < b.due ? -1 : a.due > b.due ? 1 : b.typical - a.typical));
+}
+
+/** Payments of about the same size, kept together.
+ *
+ *  A price rise would otherwise split one bill in two and lose it: the
+ *  three payments of £10.99 stay a series, the one of £12.99 is too
+ *  few to be anything. So a small, LATER group folds back into the
+ *  group it grew out of, and the amount test in series() decides
+ *  whether that still counts as the same bill. */
+function byAmount(list: RecurIn[]): RecurIn[][] {
+  const clusters: { med: number; items: RecurIn[] }[] = [];
+  for (const t of [...list].sort((a, b) => b.amount - a.amount)) {
+    const a = -t.amount;
+    const c = clusters.find((c) => Math.abs(a - c.med) <= Math.max(100, c.med * 0.12));
+    if (c) {
+      c.items.push(t);
+      c.med = median(c.items.map((x) => -x.amount));
+    } else clusters.push({ med: a, items: [t] });
+  }
+  const first = (c: { items: RecurIn[] }) => c.items.reduce((d, t) => (t.day < d ? t.day : d), c.items[0].day);
+  const last = (c: { items: RecurIn[] }) => c.items.reduce((d, t) => (t.day > d ? t.day : d), c.items[0].day);
+  for (const small of clusters.filter((c) => c.items.length < MIN_SEEN)) {
+    const host = clusters.find((c) => c !== small && c.items.length >= MIN_SEEN && last(c) < first(small) && Math.abs(small.med - c.med) <= c.med * 0.6);
+    if (!host) continue;
+    host.items.push(...small.items);
+    small.items = [];
+  }
+  return clusters.filter((c) => c.items.length >= MIN_SEEN).map((c) => c.items);
+}
+
+function series(key: string, list: RecurIn[], today: Day): Series | null {
+  {
     list.sort((a, b) => (a.day < b.day ? -1 : 1));
     /* Two charges on one day are one event to a schedule (and a
      * "double charge" to the check below). */
     const byDay: RecurIn[] = [];
     for (const t of list) if (!byDay.length || byDay[byDay.length - 1].day !== t.day) byDay.push(t);
-    if (byDay.length < MIN_SEEN) continue;
+    if (byDay.length < MIN_SEEN) return null;
 
     const days = byDay.map((t) => t.day);
     const gaps: number[] = [];
@@ -139,18 +185,18 @@ export function findRecurring(txs: RecurIn[], today: Day): Series[] {
     const every = median(gaps);
     const dated = monthlyByDate(days);
     const fit = CADENCES.find((c) => (dated && c.cadence === "monthly" ? Math.abs(every - c.days) <= 6 : Math.abs(every - c.days) <= c.slack));
-    if (!fit) continue;
+    if (!fit) return null;
     /* Every gap has to fit, or it is a shop you happen to visit
      * regularly rather than a bill. */
-    if (!gaps.every((g) => Math.abs(g - every) <= (fit.cadence === "monthly" ? 6 : fit.slack + 1))) continue;
+    if (!gaps.every((g) => Math.abs(g - every) <= (fit.cadence === "monthly" ? 6 : fit.slack + 1))) return null;
 
     const amounts = byDay.map((t) => -t.amount);
     const typical = median(amounts);
-    if (!amounts.every((a) => Math.abs(a - typical) <= Math.max(200, typical * 0.2))) continue;
+    if (!amounts.every((a) => Math.abs(a - typical) <= Math.max(200, typical * 0.2))) return null;
 
     /* Cancelled: it should have come back by now and did not. */
     const last = byDay[byDay.length - 1];
-    if (diff(last.day, today) > every * 1.8 + 5) continue;
+    if (diff(last.day, today) > every * 1.8 + 5) return null;
 
     const before = amounts.slice(0, -1);
     const prev = median(before);
@@ -158,8 +204,9 @@ export function findRecurring(txs: RecurIn[], today: Day): Series[] {
     const delta = lastAmount - prev;
     const changed = Math.abs(delta) >= Math.max(50, prev * 0.02) ? { from: prev, to: lastAmount, at: last.day, pct: Math.round((delta / prev) * 100) } : null;
 
-    out.push({
+    return {
       key,
+      id: `${key}|${typical}`,
       label: labelOf(last),
       categoryId: last.categoryId,
       cadence: fit.cadence,
@@ -169,9 +216,8 @@ export function findRecurring(txs: RecurIn[], today: Day): Series[] {
       seen: byDay.length,
       due: nextAfter(days, fit.cadence, every),
       changed,
-    });
+    };
   }
-  return out.sort((a, b) => (a.due < b.due ? -1 : a.due > b.due ? 1 : b.typical - a.typical));
 }
 
 /**
@@ -180,11 +226,15 @@ export function findRecurring(txs: RecurIn[], today: Day): Series[] {
  * A payment expected before today that has not arrived stays on the
  * list as overdue: a rent that is three days late is still rent.
  */
-export function stillDue(series: Series[], today: Day, end: Day, seenThisCycle: Set<string>): Due[] {
+export function stillDue(series: Series[], today: Day, end: Day): Due[] {
   const out: Due[] = [];
   for (const s of series) {
+    /* `due` is always after the last payment seen, so a due date in
+     * the past means it has not arrived. More than ten days late and
+     * Nori stops counting on it rather than holding money back for a
+     * bill that may never come. */
     const overdue = s.due <= today;
-    if (overdue && (seenThisCycle.has(s.key) || diff(s.due, today) > 10)) continue;
+    if (overdue && diff(s.due, today) > 10) continue;
     if (!overdue && s.due > end) continue;
     /* A weekly payment can fall due several times before payday, and
      * every one of them is money that is already gone. */

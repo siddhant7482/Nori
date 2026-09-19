@@ -1,10 +1,10 @@
 import { and, asc, desc, eq, gte, inArray, lte, sql } from "drizzle-orm";
 import { cache } from "react";
 import { db } from "@/db";
-import { categories, connection, pots, rules, settings, syncRuns, transactions } from "@/db/schema";
+import { accounts, categories, connection, pots, rules, settings, syncRuns, transactions } from "@/db/schema";
 import { addDays, today as londonToday, type Day } from "./london";
 import { computeMonth, type Month, type TxIn } from "./month";
-import { doubleCharges, findRecurring, keyOf, stillDue, type DoubleCharge, type Due, type Series } from "./recurring";
+import { doubleCharges, findRecurring, stillDue, type DoubleCharge, type Due, type Series } from "./recurring";
 import { cycleFor, detectPayday, pastCycles, type Payday } from "./payday";
 
 /* ============================================================
@@ -66,7 +66,7 @@ export interface Picture {
 export const getPicture = cache(async (): Promise<Picture> => {
   await ensureDefaults();
   const day = londonToday();
-  const [cats, [set], [conn], credits] = await Promise.all([
+  const [cats, [set], [conn], credits, [acct]] = await Promise.all([
     db.select().from(categories).orderBy(asc(categories.position)),
     db.select().from(settings).where(eq(settings.id, 1)),
     db.select().from(connection).where(eq(connection.id, 1)),
@@ -74,8 +74,11 @@ export const getPicture = cache(async (): Promise<Picture> => {
       .select({ day: transactions.day, amount: transactions.amount, payer: sql<string>`coalesce(${transactions.counterpartyName}, ${transactions.description})` })
       .from(transactions)
       .where(and(eq(transactions.kind, "income"), gte(transactions.day, addDays(day, -400)))),
+    db.select({ description: accounts.description }).from(accounts).where(eq(accounts.closed, false)).limit(1),
   ]);
-  const pay = detectPayday(credits);
+  /* Monzo names a personal account after its holder, which is how Nori
+   * knows a credit from "you" is a transfer rather than a payday. */
+  const pay = detectPayday(credits, day, acct?.description ?? null);
   const cycle = cycleFor(day, pay, set?.paydayRule ?? "auto");
   /* A year and a bit, because three occurrences is the floor for
    * calling something recurring and a yearly bill needs the room. */
@@ -85,8 +88,7 @@ export const getPicture = cache(async (): Promise<Picture> => {
     .where(and(gte(transactions.day, addDays(day, -400)), lte(transactions.day, day)));
   const series = findRecurring(history, day);
   const rows = history.filter((t) => t.day >= cycle.start);
-  const seen = new Set(rows.filter((t) => t.kind === "spend").map(keyOf));
-  const due: Due[] = stillDue(series, day, cycle.end, seen);
+  const due: Due[] = stillDue(series, day, cycle.end);
   const month = computeMonth({ cats, txs: rows.map(toTxIn), cycle, today: day, due });
   const [{ n: txCount }] = await db.select({ n: sql<number>`count(*)::int` }).from(transactions);
   return {

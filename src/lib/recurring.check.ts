@@ -83,7 +83,7 @@ ok("a cancelled gym stops being expected", () => {
 /* --- what is still due before payday --- */
 const cycle = cycleFor(TODAY, { payer: "ACME", amount: 276000, days: ["2026-08-25"], amounts: [276000], rule: { kind: "dom", dom: 25 } });
 ok("before payday: the cleaner once more, not October's rent, not the 29th", () => {
-  const due = stillDue(series, TODAY, cycle.end, new Set());
+  const due = stillDue(series, TODAY, cycle.end);
   assert.deepEqual(due.map((d) => `${d.series.label} ${d.due}`), ["H Okafor 2026-09-18"]);
   const labels = due.map((d) => d.series.label);
   assert.ok(labels.includes("H Okafor"), "the weekly cleaner");
@@ -93,15 +93,30 @@ ok("before payday: the cleaner once more, not October's rent, not the 29th", () 
 
 ok("a bill that should have arrived and has not stays on the list", () => {
   const late = findRecurring([...rent.slice(0, 5), tx("2026-09-01", 950, "J Patel", { categoryId: "bills" })], "2026-10-04");
-  const due = stillDue(late, "2026-10-04", "2026-10-24", new Set());
+  const due = stillDue(late, "2026-10-04", "2026-10-24");
   const r = due.find((d) => d.series.label === "J Patel")!;
   assert.ok(r.overdue, "due on the 1st, not seen, still expected");
   assert.equal(r.amount, 95000);
 });
 
-ok("once it has arrived this cycle it is not still due", () => {
-  const due = stillDue(series, "2026-09-02", "2026-09-24", new Set(["J PATEL"]));
+ok("once it has arrived it is not still due", () => {
+  /* The 1 September rent is in the data, so the next one is October's
+   * and this cycle owes the landlord nothing. */
+  const due = stillDue(series, "2026-09-02", "2026-09-24");
   assert.ok(!due.some((d) => d.series.label === "J Patel"));
+});
+
+ok("a payee with a pass AND top-ups keeps them apart", () => {
+  /* The real shape, from a real account: a travel pass every four
+   * weeks, plus top-ups whenever. Lumped together the amounts look
+   * random and the pass is lost. */
+  const pass = ["2026-06-16", "2026-07-14", "2026-08-11", "2026-09-08"].map((d) => tx(d, 35.7, "Nexus", { merchantGroupId: "grp_nexus", merchantName: "Nexus" }));
+  const topups = ["2026-06-20", "2026-08-19", "2026-09-09"].map((d) => tx(d, 5, "Nexus", { merchantGroupId: "grp_nexus", merchantName: "Nexus" }));
+  const found = findRecurring([...pass, ...topups], "2026-09-12");
+  const four = found.find((s) => s.typical === 3570)!;
+  assert.equal(four.cadence, "four-weekly");
+  assert.equal(four.due, "2026-10-06");
+  assert.ok(!found.some((s) => s.typical === 500), "the ad-hoc top-ups are not a schedule");
 });
 
 /* --- the daily number holds it back --- */

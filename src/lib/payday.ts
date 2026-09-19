@@ -56,6 +56,13 @@ export interface Cycle {
 /** A salary is at least this much. Below it, a monthly credit is more
  *  likely a friend's standing order than a payslip. */
 const MIN_SALARY = 30_000;
+/** Three arrivals, and every recent gap has to look monthly. Two
+ *  payments and a hopeful guess is how a cycle ends up anchored to a
+ *  transfer somebody made themselves, once. */
+const MIN_PAYDAYS = 3;
+const GAP_MIN = 24, GAP_MAX = 38;
+/** A salary that has not arrived in this long has stopped being one. */
+const STALE_DAYS = 45;
 
 function norm(payer: string): string {
   return payer.toUpperCase().replace(/[^A-Z0-9 ]+/g, " ").replace(/\s+/g, " ").trim();
@@ -108,12 +115,20 @@ function explain(days: Day[]): PayRule {
   return best;
 }
 
-export function detectPayday(credits: Credit[]): Payday | null {
+/**
+ * The salary, if there is one.
+ *
+ * `self` is the name on the account: money moved in from your own
+ * other bank is income, but it is not a payday, and a cycle anchored
+ * to it lurches whenever you happen to top up.
+ */
+export function detectPayday(credits: Credit[], today?: Day, self?: string | null): Payday | null {
   const groups = new Map<string, Credit[]>();
+  const mine = self ? norm(self) : null;
   for (const c of credits) {
     if (c.amount < MIN_SALARY) continue;
     const k = norm(c.payer);
-    if (!k) continue;
+    if (!k || (mine && k === mine)) continue;
     const g = groups.get(k) ?? [];
     g.push(c);
     groups.set(k, g);
@@ -121,10 +136,12 @@ export function detectPayday(credits: Credit[]): Payday | null {
   let best: { payer: string; list: Credit[]; median: number } | null = null;
   for (const [, list] of groups) {
     list.sort((a, b) => (a.day < b.day ? -1 : 1));
-    /* Monthly means consecutive credits 25-35 days apart. One pair is
-     * enough to call it a salary; a single credit is not. */
-    const monthly = list.filter((c, i) => i > 0 && Math.abs(diff(list[i - 1].day, c.day) - 30) <= 5).length;
-    if (monthly < 1) continue;
+    if (list.length < MIN_PAYDAYS) continue;
+    /* Every recent gap has to look monthly. Four monthly transfers
+     * followed by six months of silence is not a salary. */
+    const gaps = list.slice(1).map((c, i) => diff(list[i].day, c.day));
+    if (!gaps.slice(-4).every((g) => g >= GAP_MIN && g <= GAP_MAX)) continue;
+    if (today && diff(list[list.length - 1].day, today) > STALE_DAYS) continue;
     const sorted = list.map((c) => c.amount).sort((a, b) => a - b);
     const median = sorted[Math.floor(sorted.length / 2)];
     if (!best || median > best.median) best = { payer: list[list.length - 1].payer, list, median };
