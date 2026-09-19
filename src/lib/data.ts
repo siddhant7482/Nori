@@ -5,7 +5,7 @@ import { accounts, categories, connection, pots, rules, settings, syncRuns, tran
 import { addDays, today as londonToday, type Day } from "./london";
 import { computeMonth, type Month, type TxIn } from "./month";
 import { doubleCharges, findRecurring, stillDue, type DoubleCharge, type Due, type Series } from "./recurring";
-import { cycleFor, detectPayday, pastCycles, type Payday } from "./payday";
+import { cycleFor, detectPayday, payCandidates, pastCycles, type Candidate, type Payday } from "./payday";
 
 /* ============================================================
    Reads, shaped for screens. Every figure goes through computeMonth
@@ -45,6 +45,8 @@ const toTxIn = (t: typeof transactions.$inferSelect): TxIn => ({
 
 export interface Picture {
   month: Month;
+  /** Who pays you, for you to say which one is the pay. */
+  candidates: Candidate[];
   /** Every recurring payment Nori has found, soonest due first. */
   series: Series[];
   doubles: DoubleCharge[];
@@ -78,7 +80,8 @@ export const getPicture = cache(async (): Promise<Picture> => {
   ]);
   /* Monzo names a personal account after its holder, which is how Nori
    * knows a credit from "you" is a transfer rather than a payday. */
-  const pay = detectPayday(credits, day, acct?.description ?? null);
+  const pay = detectPayday(credits, day, acct?.description ?? null, set?.payPayer ?? null);
+  const candidates = payCandidates(credits, acct?.description ?? null);
   const cycle = cycleFor(day, pay, set?.paydayRule ?? "auto");
   /* A year and a bit, because three occurrences is the floor for
    * calling something recurring and a yearly bill needs the room. */
@@ -93,6 +96,7 @@ export const getPicture = cache(async (): Promise<Picture> => {
   const [{ n: txCount }] = await db.select({ n: sql<number>`count(*)::int` }).from(transactions);
   return {
     month,
+    candidates,
     series,
     doubles: doubleCharges(history, cycle.start),
     pay,

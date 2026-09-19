@@ -2,7 +2,8 @@
 
 import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState, useTransition } from "react";
-import { deleteRule, setBudget, setPaydayRule, setVoice, syncNow } from "@/app/actions";
+import { deleteRule, setBudget, setPayPayer, setPaydayRule, setVoice, syncNow } from "@/app/actions";
+import { withDay } from "@/lib/london";
 import { gbp } from "@/lib/format";
 import { toast } from "./toast";
 
@@ -135,6 +136,40 @@ function BudgetRow({ c }: { c: BudgetCat }) {
         ) : c.fixed ? "Rent, council tax and the like: known in advance, so not in the daily number." : "No history yet to suggest a number from."}
       </span>
     </div>
+  );
+}
+
+/* ---------- whose money is your pay ----------
+   Detection can spot a payslip from an employer. It cannot tell a
+   transfer from your own salary account apart from you shuffling
+   savings, so it asks once and remembers. */
+export function PayPicker({ candidates, chosen }: { candidates: { payer: string; count: number; median: number; last: string; isSelf: boolean; regular: boolean }[]; chosen: string | null }) {
+  const { busy, run } = useAct();
+  if (chosen)
+    return (
+      <p className="sub">
+        You told Nori your pay comes from <b>{chosen}</b>.{" "}
+        <button className="lnk" type="button" disabled={busy} onClick={() => run(() => setPayPayer(null))}>Not my pay</button>
+      </p>
+    );
+  if (!candidates.length) return <p className="sub">Nothing that looks like pay has arrived yet. Cycles follow the calendar month until it does.</p>;
+  return (
+    <>
+      <p className="sub">Which of these is your pay? Cycles then run from one to the next. Money you move in from your own account counts, if that is how you are paid.</p>
+      <div>
+        {candidates.map((c) => (
+          <div className="bud-row" key={c.payer}>
+            <span className="nm">
+              {c.payer}
+              {c.isSelf ? <span className="tag mute" style={{ marginLeft: ".5rem" }}>FROM YOU</span> : null}
+              {c.regular ? <span className="tag" style={{ marginLeft: ".5rem" }}>MONTHLY</span> : null}
+            </span>
+            <button className="btn ghost" type="button" disabled={busy} onClick={() => run(() => setPayPayer(c.payer))}>This is my pay</button>
+            <span className="hint">{c.count} arrivals · usually {gbp(c.median)} · last {withDay(c.last)}</span>
+          </div>
+        ))}
+      </div>
+    </>
   );
 }
 

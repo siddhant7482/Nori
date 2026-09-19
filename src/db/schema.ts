@@ -136,6 +136,10 @@ export const settings = pgTable("settings", {
   voice: text("voice").notNull().default("direct"),
   /** "auto" follows the salary; anything else is a person overriding it. */
   paydayRule: text("payday_rule").notNull().default("auto"),
+  /** The payer you named as your pay. Beats anything detection thinks:
+   *  a transfer from your own salary account looks like any other
+   *  transfer from the outside. */
+  payPayer: text("pay_payer"),
 });
 
 export const syncRuns = pgTable("sync_runs", {

@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { EXAMPLE_CATEGORIES, EXAMPLE_TODAY, exampleTransactions } from "@/db/example";
 import { afford, affordInput, affordText, catById, computeMonth } from "./month";
-import { cycleFor, detectPayday, nextPayDate, payDate } from "./payday";
+import { cycleFor, detectPayday, nextPayDate, payCandidates, payDate } from "./payday";
 
 /* ============================================================
    `pnpm check`: the arithmetic, against figures worked out by hand.
@@ -42,10 +42,32 @@ ok("a monthly £40 from a friend is not mistaken for a salary", () => {
   assert.equal(detectPayday(friend), null);
 });
 
-ok("money moved in from your own other bank is not a payday", () => {
-  const self = ["2026-05-29", "2026-06-30", "2026-07-31", "2026-08-31"].map((day) => ({ day, amount: 66000, payer: "Siddhant Bhasin" }));
-  assert.ok(detectPayday(self, "2026-09-12"), "not knowing the name, it looks like one");
-  assert.equal(detectPayday(self, "2026-09-12", "Siddhant Bhasin"), null, "knowing the name, it is a transfer");
+/* Plenty of people are paid into one bank and move the money to the
+ * one they spend from. Nori cannot tell that from savings shuffling,
+ * so it asks; and the answer beats anything it thinks. */
+const ownName = ["2025-11-30", "2025-12-31", "2026-02-02", "2026-03-04", "2026-08-31"].map((day) => ({ day, amount: 66000, payer: "Siddhant Bhasin" }));
+
+ok("money from your own name is not assumed to be pay", () => {
+  assert.equal(detectPayday(ownName, "2026-09-12", "Siddhant Bhasin"), null);
+});
+
+ok("but it is your pay the moment you say so, gaps and all", () => {
+  const p = detectPayday(ownName, "2026-09-12", "Siddhant Bhasin", "Siddhant Bhasin");
+  assert.ok(p);
+  assert.equal(p.chosen, true);
+  assert.equal(p.days.length, 5);
+  /* Month-end transfers: the rule is the last working day. */
+  assert.equal(cycleFor("2026-09-20", p).start, "2026-08-31");
+  assert.equal(cycleFor("2026-09-20", p).basis, "salary");
+});
+
+ok("who pays you is offered, with your own transfers marked as yours", () => {
+  const list = payCandidates([...ownName, { day: "2026-07-24", amount: 45000, payer: "Vaishnav Prabhu" }], "Siddhant Bhasin");
+  assert.equal(list[0].payer, "Siddhant Bhasin");
+  assert.equal(list[0].isSelf, true);
+  assert.equal(list[0].count, 5);
+  assert.equal(list[0].regular, false, "a six-month gap is not regular");
+  assert.equal(list.length, 1, "one credit from someone is not a candidate");
 });
 
 ok("four monthly transfers then six months of silence is not a salary", () => {

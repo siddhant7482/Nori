@@ -71,6 +71,14 @@ export async function setPaydayRule(rule: string): Promise<Result> {
   return done(rule === "auto" ? "Payday follows your salary again." : rule === "calendar" ? "Cycles follow the calendar month now." : "Payday rule changed. The current cycle was worked out again.");
 }
 
+/** Name the credit that is your pay. Everything about cycles follows
+ *  from it, so it is a person's call, not a guess. */
+export async function setPayPayer(payer: string | null): Promise<Result> {
+  const value = payer?.trim() || null;
+  await db.insert(settings).values({ id: 1, payPayer: value }).onConflictDoUpdate({ target: settings.id, set: { payPayer: value } });
+  return done(value ? `Pay comes from ${value}. Cycles run from one to the next.` : "Forgotten. Cycles follow the calendar month until you say otherwise.");
+}
+
 export async function deleteRule(id: number): Promise<Result> {
   const [r] = await db.delete(rules).where(eq(rules.id, id)).returning();
   if (!r) return { ok: false, message: "That rule is already gone." };

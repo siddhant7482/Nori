@@ -228,6 +228,7 @@ function Needs({ pic }: { pic: Awaited<ReturnType<typeof getPicture>> }) {
   if (!pic.conn.connected) items.push({ t: "NOW", href: "/settings", hot: true, s: <><b>Monzo isn&apos;t connected.</b> You&apos;re looking at the example cycle, not your money.</> });
   else if (!pic.conn.approved) items.push({ t: "NOW", href: "/settings", hot: true, s: <><b>Approve Nori in the Monzo app.</b> Nothing can be read until you do.</> });
   else if (pic.conn.lastError) items.push({ t: "SYNC", href: "/settings", hot: true, s: <><b>The last sync failed.</b> {pic.conn.lastError}</> });
+  if (!pic.pay && pic.candidates.length) items.push({ t: "SETUP", href: "/settings#payday", hot: true, s: <><b>Tell Nori which credit is your pay.</b> Until then cycles are calendar months. {pic.candidates[0].payer} pays you most often, {pic.candidates[0].count} times.</> });
   if (m.cycle.late) items.push({ t: "LATE", href: "/settings#payday", hot: true, s: <><b>Payday was due and no salary has landed.</b> The cycle stretches until it does.</> });
   if (m.unfiled.length) items.push({ t: "NOW", href: "/transactions?show=unfiled", hot: true, s: <><b>{words(m.unfiled.length)} payment{m.unfiled.length === 1 ? "" : "s"}</b> the rules couldn&apos;t place, {gbp(m.unfiledTotal)} between them. File each once and Nori knows the shop from then on.</> });
   for (const i of m.ious) {

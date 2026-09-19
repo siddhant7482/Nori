@@ -81,7 +81,7 @@ ok("a cancelled gym stops being expected", () => {
 });
 
 /* --- what is still due before payday --- */
-const cycle = cycleFor(TODAY, { payer: "ACME", amount: 276000, days: ["2026-08-25"], amounts: [276000], rule: { kind: "dom", dom: 25 } });
+const cycle = cycleFor(TODAY, { payer: "ACME", chosen: false, amount: 276000, days: ["2026-08-25"], amounts: [276000], rule: { kind: "dom", dom: 25 } });
 ok("before payday: the cleaner once more, not October's rent, not the 29th", () => {
   const due = stillDue(series, TODAY, cycle.end);
   assert.deepEqual(due.map((d) => `${d.series.label} ${d.due}`), ["H Okafor 2026-09-18"]);

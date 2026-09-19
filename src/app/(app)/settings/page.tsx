@@ -1,6 +1,6 @@
 import { Hd, Head } from "@/components/bits";
 import Link from "next/link";
-import { FirstSync, PaydayRule, RuleList, SyncNow, VoiceDial } from "@/components/SettingsParts";
+import { FirstSync, PayPicker, PaydayRule, RuleList, SyncNow, VoiceDial } from "@/components/SettingsParts";
 import { allRules, getPicture, lastRuns } from "@/lib/data";
 import { gbp } from "@/lib/format";
 import { short, withDay } from "@/lib/london";
@@ -79,10 +79,10 @@ export default async function Settings({ searchParams }: { searchParams: Promise
 
         <div className="stack">
           <div className="card" id="payday">
-            <Hd title="Payday" right={pic.pay ? "FOUND, NOT TYPED" : "NOT FOUND YET"} />
+            <Hd title="Payday" right={pic.pay ? (pic.pay.chosen ? "YOU CHOSE THIS" : "FOUND, NOT TYPED") : "NOT SET"} />
             {pic.pay ? (
               <>
-                <p className="sub">Your salary from <b>{pic.pay.payer}</b>, found in {pic.pay.days.length} payments. Budgets run salary to salary, so a cycle ends the day before the next one lands. The rule that fits: {describeRule(pic.pay.rule)}.</p>
+                <p className="sub">Your pay from <b>{pic.pay.payer}</b>, {pic.pay.days.length} arrivals. Cycles run from one to the next, so a cycle ends the day before the next one lands. The rule that fits: {describeRule(pic.pay.rule)}.</p>
                 <div className="pay">
                   {pic.pay.days.slice(-6).map((d, i, a) => (
                     <div className="ln" key={d}><span>{withDay(d)}</span><span className="num">{gbp(pic.pay!.amounts[pic.pay!.amounts.length - a.length + i])}</span></div>
@@ -90,9 +90,8 @@ export default async function Settings({ searchParams }: { searchParams: Promise
                   <div className="ln tot"><span>Next, predicted</span><span className="num">{withDay(m.cycle.nextPayday)}</span></div>
                 </div>
               </>
-            ) : (
-              <p className="sub">No salary found yet: that takes two monthly payments of at least £300 from the same payer. Until then cycles follow the calendar month.</p>
-            )}
+            ) : null}
+            <PayPicker candidates={pic.candidates} chosen={pic.pay?.chosen ? pic.pay.payer : null} />
             <PaydayRule value={pic.paydayRule} detected={pic.pay ? describeRule(pic.pay.rule) : null} />
           </div>
           <div className="card">

@@ -3,9 +3,17 @@ import { addDays, diff, make, weekday, ymd, type Day } from "./london";
 /* ============================================================
    Payday, found rather than typed.
 
-   Budgets run salary to salary, because that is how long the money
-   has to last. The salary is found in the feed: the largest credit
-   that arrives from the same payer about once a month. Its dates
+   Budgets run payday to payday, because that is how long the money
+   has to last. The pay is found in the feed: the largest credit that
+   arrives from the same payer about once a month.
+
+   Finding it automatically only works for a payslip landing from an
+   employer. Plenty of people are paid into one bank and move the
+   money to the one they spend from, and that transfer is their
+   payday even though it comes from their own name. Nori cannot tell
+   those apart by looking, so it stops guessing: it lists who pays
+   you and you say which one is the pay. That answer wins over
+   anything detection thinks. Its dates
    are then explained by a rule, so the NEXT payday can be predicted
    before it lands — that prediction is what "days left" divides by.
 
@@ -26,8 +34,22 @@ export interface Credit {
   payer: string;
 }
 
+export interface Candidate {
+  payer: string;
+  count: number;
+  /** Typical amount, in pence. */
+  median: number;
+  last: Day;
+  /** From your own other bank: still pay, if you say so. */
+  isSelf: boolean;
+  /** Every gap between arrivals looks monthly. */
+  regular: boolean;
+}
+
 export interface Payday {
   payer: string;
+  /** You said so, rather than Nori working it out. */
+  chosen: boolean;
   /** The most recent salary, in pence. */
   amount: number;
   /** Every salary found, oldest first. */
@@ -80,7 +102,7 @@ export function payDate(rule: PayRule, y: number, m: number): Day {
 
 export function describeRule(rule: PayRule | null): string {
   if (!rule) return "the calendar month";
-  if (rule.kind === "lwd") return "the last working day of the month";
+  if (rule.kind === "lwd" || rule.dom === 31) return "the last working day of the month";
   const n = rule.dom;
   const th = n % 10 === 1 && n !== 11 ? "st" : n % 10 === 2 && n !== 12 ? "nd" : n % 10 === 3 && n !== 13 ? "rd" : "th";
   return `the ${n}${th}, or the Friday before when it falls on a weekend`;
@@ -122,39 +144,76 @@ function explain(days: Day[]): PayRule {
  * other bank is income, but it is not a payday, and a cycle anchored
  * to it lurches whenever you happen to top up.
  */
-export function detectPayday(credits: Credit[], today?: Day, self?: string | null): Payday | null {
+function group(credits: Credit[]): Map<string, Credit[]> {
   const groups = new Map<string, Credit[]>();
-  const mine = self ? norm(self) : null;
   for (const c of credits) {
     if (c.amount < MIN_SALARY) continue;
     const k = norm(c.payer);
-    if (!k || (mine && k === mine)) continue;
+    if (!k) continue;
     const g = groups.get(k) ?? [];
     g.push(c);
     groups.set(k, g);
   }
+  for (const list of groups.values()) list.sort((a, b) => (a.day < b.day ? -1 : 1));
+  return groups;
+}
+
+const monthlyGaps = (list: Credit[]) => list.slice(1).map((c, i) => diff(list[i].day, c.day)).slice(-4).every((g) => g >= GAP_MIN && g <= GAP_MAX);
+
+/** Who pays you, biggest and most recent first, for you to choose from. */
+export function payCandidates(credits: Credit[], self?: string | null): Candidate[] {
+  const mine = self ? norm(self) : null;
+  const out: Candidate[] = [];
+  for (const [k, list] of group(credits)) {
+    if (list.length < 2) continue;
+    const amounts = list.map((c) => c.amount).sort((a, b) => a - b);
+    out.push({
+      payer: list[list.length - 1].payer,
+      count: list.length,
+      median: amounts[Math.floor(amounts.length / 2)],
+      last: list[list.length - 1].day,
+      isSelf: Boolean(mine && k === mine),
+      regular: list.length >= MIN_PAYDAYS && monthlyGaps(list),
+    });
+  }
+  return out.sort((a, b) => (b.last < a.last ? -1 : b.last > a.last ? 1 : b.median - a.median));
+}
+
+function payFrom(list: Credit[], chosen: boolean): Payday {
+  const days = list.map((c) => c.day);
+  return { payer: list[list.length - 1].payer, chosen, amount: list[list.length - 1].amount, days, amounts: list.map((c) => c.amount), rule: explain(days) };
+}
+
+/**
+ * The pay, if it can be known.
+ *
+ * `chosen` is the payer you named in Settings, and it always wins.
+ * Without it, only an obvious payslip counts: three or more arrivals,
+ * every recent gap monthly, one of them recent, and not from your own
+ * name — because a transfer from yourself is just as likely to be you
+ * moving savings about. When nothing qualifies, Nori says it found
+ * none and asks, rather than anchoring your month to a guess.
+ */
+export function detectPayday(credits: Credit[], today?: Day, self?: string | null, chosen?: string | null): Payday | null {
+  const groups = group(credits);
+  const mine = self ? norm(self) : null;
+  if (chosen) {
+    const list = groups.get(norm(chosen));
+    if (list?.length) return payFrom(list, true);
+  }
   let best: { payer: string; list: Credit[]; median: number } | null = null;
-  for (const [, list] of groups) {
-    list.sort((a, b) => (a.day < b.day ? -1 : 1));
+  for (const [k, list] of groups) {
+    if (mine && k === mine) continue;
     if (list.length < MIN_PAYDAYS) continue;
     /* Every recent gap has to look monthly. Four monthly transfers
-     * followed by six months of silence is not a salary. */
-    const gaps = list.slice(1).map((c, i) => diff(list[i].day, c.day));
-    if (!gaps.slice(-4).every((g) => g >= GAP_MIN && g <= GAP_MAX)) continue;
+     * followed by six months of silence is not a payslip. */
+    if (!monthlyGaps(list)) continue;
     if (today && diff(list[list.length - 1].day, today) > STALE_DAYS) continue;
     const sorted = list.map((c) => c.amount).sort((a, b) => a - b);
     const median = sorted[Math.floor(sorted.length / 2)];
     if (!best || median > best.median) best = { payer: list[list.length - 1].payer, list, median };
   }
-  if (!best) return null;
-  const days = best.list.map((c) => c.day);
-  return {
-    payer: best.payer,
-    amount: best.list[best.list.length - 1].amount,
-    days,
-    amounts: best.list.map((c) => c.amount),
-    rule: explain(days),
-  };
+  return best ? payFrom(best.list, false) : null;
 }
 
 /** The first payday the rule predicts after `after`. */
