@@ -45,6 +45,20 @@ export function classify(t: MonzoTransaction, ownUserId: string | null): Kind {
   return t.merchant ? "refund" : "income";
 }
 
+/** The bank details of the people you pay, and who pay you, are not
+ *  Nori's business. Monzo sends account numbers and sort codes with
+ *  every transfer; the name is kept (it is how a repayment is matched
+ *  to whoever owes it) and the numbers are dropped before anything is
+ *  stored. */
+const PRIVATE = ["account_number", "sort_code", "bank_code", "iban", "bic", "service_user_number", "beneficiary_account_type", "payee_account_id"];
+
+export function scrub(t: MonzoTransaction): MonzoTransaction {
+  if (!t.counterparty || typeof t.counterparty !== "object") return t;
+  const cp: Record<string, unknown> = { ...t.counterparty };
+  for (const k of PRIVATE) delete cp[k];
+  return { ...t, counterparty: cp as MonzoTransaction["counterparty"] };
+}
+
 function toRow(t: MonzoTransaction, ownUserId: string | null) {
   const merchant = t.merchant && typeof t.merchant === "object" ? t.merchant : null;
   const created = new Date(t.created);
@@ -67,7 +81,7 @@ function toRow(t: MonzoTransaction, ownUserId: string | null) {
     kind: classify(t, ownUserId),
     potId: t.metadata?.pot_id ?? null,
     notes: t.notes || null,
-    raw: t,
+    raw: scrub(t),
     updatedAt: new Date(),
   };
 }

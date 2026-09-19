@@ -65,6 +65,12 @@ export async function exchangeCode(code: string): Promise<void> {
     redirect_uri: process.env.MONZO_REDIRECT_URI!,
     code,
   });
+  /* Nori holds one account's history. Authorising a different Monzo
+   * account would quietly pour its payments into the same budgets. */
+  const [existing] = await db.select({ user: connection.monzoUserId }).from(connection).where(eq(connection.id, 1));
+  if (existing?.user && existing.user !== t.user_id) {
+    throw new Error("That's a different Monzo account from the one Nori already reads. Nori keeps one account's history and won't mix a second into it.");
+  }
   const row = {
     monzoUserId: t.user_id,
     accessToken: encryptSecret(t.access_token),
