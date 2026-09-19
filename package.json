@@ -13,6 +13,7 @@
     "db:push": "drizzle-kit push",
     "db:studio": "drizzle-kit studio",
     "sync": "tsx src/monzo/run-sync.ts",
+    "read": "tsx src/receipts/run-read.ts",
     "seed:example": "tsx src/db/seed-example.ts",
     "hash-password": "tsx src/lib/hash-password.ts"
   },

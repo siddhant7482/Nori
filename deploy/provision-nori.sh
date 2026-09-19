@@ -89,6 +89,11 @@ EnvironmentFile=${DIR}/.env.local
 Environment=NODE_ENV=production
 Environment=PORT=${PORT}
 Environment=HOSTNAME=0.0.0.0
+# Reading a receipt runs out of the repo, not the standalone bundle:
+# Tesseract loads a worker from node_modules and a page render has no
+# business holding hundreds of megabytes of wasm.
+Environment=NORI_HOME=${DIR}
+Environment=PATH=/usr/local/bin:/usr/bin:/bin
 ExecStart=/usr/local/bin/node server.js
 Restart=on-failure
 RestartSec=5
